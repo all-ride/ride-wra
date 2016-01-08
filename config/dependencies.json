@@ -1,0 +1,24 @@
+{
+    "dependencies": [
+        {
+            "interfaces": "ride\\library\\http\\jsonapi\\JsonApi",
+            "class": "ride\\library\\http\\jsonapi\\JsonApi",
+            "id": "app",
+            "calls": [
+                {
+                    "method": "setResourceAdapters",
+                    "arguments": [
+                        {
+                            "name": "resourceAdapters",
+                            "type": "dependencies",
+                            "properties": {
+                                "interface": "ride\\library\\http\\jsonapi\\JsonApiResourceAdapter",
+                                "include": "app"
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
