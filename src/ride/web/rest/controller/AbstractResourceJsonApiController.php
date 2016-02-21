@@ -40,13 +40,14 @@ abstract class AbstractResourceJsonApiController extends AbstractJsonApiControll
      * @param \ride\library\log\Log $log
      * @return null
      */
-    public function __construct(JsonApi $api, MimeService $mimeService, JsonParser $jsonParser, ReflectionHelper $reflectionHelper, Log $log) {
+    public function __construct(JsonApi $jsonApi, JsonParser $jsonParser, MimeService $mimeService, ReflectionHelper $reflectionHelper) {
         $this->reflectionHelper = $reflectionHelper;
+
         $this->attributes = array();
         $this->relationships = array();
         $this->routes = array();
 
-        parent::__construct($api, $mimeService, $jsonParser, $log);
+        parent::__construct($jsonApi, $jsonParser, $mimeService);
     }
 
     /**

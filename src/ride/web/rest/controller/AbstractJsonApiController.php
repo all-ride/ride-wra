@@ -8,7 +8,6 @@ use ride\library\http\jsonapi\JsonApiQuery;
 use ride\library\http\jsonapi\JsonApi;
 use ride\library\http\Header;
 use ride\library\http\Response;
-use ride\library\log\Log;
 
 use ride\service\MimeService;
 
@@ -23,6 +22,10 @@ abstract class AbstractJsonApiController extends AbstractController {
 
     protected $api;
 
+    protected $jsonParser;
+
+    protected $mimeService;
+
     protected $supportedExtensions;
 
     protected $requestedExtensions;
@@ -31,25 +34,19 @@ abstract class AbstractJsonApiController extends AbstractController {
 
     protected $document;
 
-    protected $jsonParser;
-
-    protected $log;
-
     /**
      * Constructs a new JSON API controller
      * @param \ride\library\http\jsonapi\JsonApi $api
-     * @param \ride\library\log\Log $log
      * @return null
      */
-    public function __construct(JsonApi $api, MimeService $mimeService, JsonParser $jsonParser, Log $log) {
-        $this->api = $api;
+    public function __construct(JsonApi $jsonApi, JsonParser $jsonParser, MimeService $mimeService) {
+        $this->api = $jsonApi;
+        $this->jsonParser = $jsonParser;
         $this->mimeService = $mimeService;
+
         $this->supportedExtensions = array();
         $this->requestedExtensions = array();
         $this->usedExtensions = array();
-
-        $this->jsonParser = $jsonParser;
-        $this->log = $log;
 
         $this->initialize();
     }
@@ -256,9 +253,12 @@ abstract class AbstractJsonApiController extends AbstractController {
         }
     }
 
-    protected function addResourceNotFoundError($resourceType, $id) {
+    protected function addResourceNotFoundError($resourceType, $id, $source = null) {
         $error = $this->api->createError(Response::STATUS_CODE_NOT_FOUND, 'resource.found', 'Resource does not exist');
         $error->setDetail('Resource with type \'' . $resourceType . '\' and id \'' . $id . '\' does not exist');
+        if ($source) {
+            $error->setSourcePointer($source);
+        }
 
         $this->document->addError($error);
     }
