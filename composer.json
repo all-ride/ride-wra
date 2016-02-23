@@ -2,7 +2,7 @@
     "name": "ride/wra",
     "description": "Abstract JSON API implementations of a Ride application",
     "license": "MIT",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "authors": [
         {
             "name": "Joris Vandeweerd",
