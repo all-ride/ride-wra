@@ -3,6 +3,7 @@
 namespace ride\web\rest\controller;
 
 use ride\library\config\parser\JsonParser;
+use ride\library\http\jsonapi\exception\BadRequestJsonApiException;
 use ride\library\http\jsonapi\exception\JsonApiException;
 use ride\library\http\jsonapi\JsonApiQuery;
 use ride\library\http\jsonapi\JsonApi;
@@ -25,6 +26,8 @@ abstract class AbstractResourceJsonApiController extends AbstractJsonApiControll
     const ROUTE_RELATED = 'related';
 
     protected $type;
+
+    protected $allowClientId;
 
     protected $idField;
 
@@ -62,10 +65,12 @@ abstract class AbstractResourceJsonApiController extends AbstractJsonApiControll
     /**
      * Sets the id field in the resource data
      * @param string $idField Name of the id field in the resource data
+     * @param boolean $allowClientId Allow client side id for new resources
      * @return null
      */
-    protected function setIdField($idField) {
+    protected function setIdField($idField, $allowClientId = false) {
         $this->idField = $idField;
+        $this->allowClientId = $allowClientId;
     }
 
     public function setAttribute($attribute) {
@@ -101,12 +106,21 @@ abstract class AbstractResourceJsonApiController extends AbstractJsonApiControll
     public function indexAction() {
         $query = $this->document->getQuery();
 
-        $resources = $this->getResources($query, $total);
+        try {
+            $resources = $this->getResources($query, $total);
 
-        if (!$this->document->getErrors()) {
-            $this->document->setLink('self', $this->request->getUrl());
-            $this->document->setResourceCollection($this->type, $resources);
-            $this->document->setMeta('total', $total);
+            if (!$this->document->getErrors()) {
+                $this->document->setLink('self', $this->request->getUrl());
+                $this->document->setResourceCollection($this->type, $resources);
+                $this->document->setMeta('total', $total);
+            }
+        } catch (BadRequestJsonApiException $exception) {
+            $this->getLog()->logException($exception);
+
+            $error = $this->api->createError(Response::STATUS_CODE_BAD_REQUEST, 'index.input', $exception->getMessage());
+            $error->setSourceParameter($exception->getParameter());
+
+            $this->document->addError($error);
         }
     }
 
@@ -116,13 +130,22 @@ abstract class AbstractResourceJsonApiController extends AbstractJsonApiControll
      * @return null
      */
     public function detailAction($id) {
-        $resource = $this->getResource($id);
-        if (!$resource) {
-            return;
-        }
+        try {
+            $resource = $this->getResource($id);
+            if (!$resource) {
+                return;
+            }
 
-        $this->document->setResourceData($this->type, $resource);
-        $this->document->setLink('self', $this->request->getUrl());
+            $this->document->setResourceData($this->type, $resource);
+            $this->document->setLink('self', $this->request->getUrl());
+        } catch (BadRequestJsonApiException $exception) {
+            $this->getLog()->logException($exception);
+
+            $error = $this->api->createError(Response::STATUS_CODE_BAD_REQUEST, 'index.input', $exception->getMessage());
+            $error->setSourceParameter($exception->getParameter());
+
+            $this->document->addError($error);
+        }
     }
 
     /**
@@ -132,21 +155,30 @@ abstract class AbstractResourceJsonApiController extends AbstractJsonApiControll
      * @return null
      */
     public function relatedAction($id, $relationship) {
-        $resource = $this->getResource($id);
-        if (!$resource) {
-            return;
+        try {
+            $resource = $this->getResource($id);
+            if (!$resource) {
+                return;
+            }
+
+            if (!isset($this->relationships[$relationship])) {
+                $this->addRelationshipNotFoundError($this->type, $id, $relationship);
+
+                return;
+            }
+
+            $value = $this->reflectionHelper->getProperty($resource, $relationship);
+
+            $this->document->setResourceData($this->relationships[$relationship]['type'], $value);
+            $this->document->setLink('self', $this->request->getUrl());
+        } catch (BadRequestJsonApiException $exception) {
+            $this->getLog()->logException($exception);
+
+            $error = $this->api->createError(Response::STATUS_CODE_BAD_REQUEST, 'index.input', $exception->getMessage());
+            $error->setSourceParameter($exception->getParameter());
+
+            $this->document->addError($error);
         }
-
-        if (!isset($this->relationships[$relationship])) {
-            $this->addRelationshipNotFoundError($this->type, $id, $relationship);
-
-            return;
-        }
-
-        $value = $this->reflectionHelper->getProperty($resource, $relationship);
-
-        $this->document->setResourceData($this->relationships[$relationship]['type'], $value);
-        $this->document->setLink('self', $this->request->getUrl());
     }
 
     /**
@@ -156,29 +188,38 @@ abstract class AbstractResourceJsonApiController extends AbstractJsonApiControll
      * @return null
      */
     public function relationshipAction($id, $relationship) {
-        $resource = $this->getResource($id);
-        if (!$resource) {
-            return;
+        try {
+            $resource = $this->getResource($id);
+            if (!$resource) {
+                return;
+            }
+
+            if (!isset($this->relationships[$relationship])) {
+                $this->addRelationshipNotFoundError($this->type, $id, $relationship);
+
+                return;
+            }
+
+            $relationshipProperties = $this->relationships[$relationship];
+
+            $value = $this->reflectionHelper->getProperty($resource, $relationship);
+            $id = $this->reflectionHelper->getProperty($value, $relationshipProperties['id']);
+
+            $relationshipResource = $this->api->createResource($relationshipProperties['type'], $id);
+            $relationshipData = $this->api->createRelationship();
+            $relationshipData->setResource($relationshipResource);
+
+            $this->document->setLink('self', $this->request->getUrl());
+            $this->document->setLink('related', $this->getUrl($this->getRoute(self::ROUTE_RELATED), array('id' => $id, 'relationship' => $relationship)));
+            $this->document->setRelationshipData($relationshipData);
+        } catch (BadRequestJsonApiException $exception) {
+            $this->getLog()->logException($exception);
+
+            $error = $this->api->createError(Response::STATUS_CODE_BAD_REQUEST, 'index.input', $exception->getMessage());
+            $error->setSourceParameter($exception->getParameter());
+
+            $this->document->addError($error);
         }
-
-        if (!isset($this->relationships[$relationship])) {
-            $this->addRelationshipNotFoundError($this->type, $id, $relationship);
-
-            return;
-        }
-
-        $relationshipProperties = $this->relationships[$relationship];
-
-        $value = $this->reflectionHelper->getProperty($resource, $relationship);
-        $id = $this->reflectionHelper->getProperty($value, $relationshipProperties['id']);
-
-        $relationshipResource = $this->api->createResource($relationshipProperties['type'], $id);
-        $relationshipData = $this->api->createRelationship();
-        $relationshipData->setResource($relationshipResource);
-
-        $this->document->setLink('self', $this->request->getUrl());
-        $this->document->setLink('related', $this->getUrl($this->getRoute(self::ROUTE_RELATED), array('id' => $id, 'relationship' => $relationship)));
-        $this->document->setRelationshipData($relationshipData);
     }
 
     /**
@@ -214,7 +255,7 @@ abstract class AbstractResourceJsonApiController extends AbstractJsonApiControll
         }
 
         $resourceId = $this->reflectionHelper->getProperty($resource, $this->idField);
-        if ($id === null && $resourceId) {
+        if (!$this->allowClientId && $id === null && $resourceId) {
             // single resource, post request but we have a submitted id
             $this->addIdInputError($resourceId);
         } elseif ($this->request->isPatch() && !$resourceId) {
@@ -268,7 +309,7 @@ abstract class AbstractResourceJsonApiController extends AbstractJsonApiControll
             $index .= '/';
             $resourceId = $this->reflectionHelper->getProperty($resource, $this->idField);
 
-            if ($this->request->isPost() && $resourceId) {
+            if (!$this->allowClientId && $this->request->isPost() && $resourceId) {
                 $this->addIdInputError($resourceId);
             } elseif ($this->request->isPatch() && !$resourceId) {
                 $this->addIdNotFoundError($index);
@@ -478,10 +519,16 @@ abstract class AbstractResourceJsonApiController extends AbstractJsonApiControll
 
         // check the id of the entry
         $resourceId = $this->reflectionHelper->getProperty($resource, $this->idField);
-        if (!$resourceId && isset($data['id'])) {
-            // client generated id is not allowed
-            return $this->addIdInputError($data['id'], $index);
-        } elseif ($resourceId && ((isset($data['id']) && $resourceId != $data['id']) || ($id !== null && $resourceId != $id))) {
+        if (isset($data['id'])) {
+            if (!$this->allowClientId && !$resourceId) {
+                // client generated id is not allowed
+                return $this->addIdInputError($data['id'], $index);
+            } else {
+                $this->reflectionHelper->setProperty($resource, 'id', $data['id']);
+            }
+        }
+
+        if ($resourceId && ((isset($data['id']) && $resourceId != $data['id']) || ($id !== null && $resourceId != $id))) {
             // submitted id does not match the url
             return $this->addIdMatchError($data['id'], $id, $index);
         }
@@ -622,6 +669,5 @@ abstract class AbstractResourceJsonApiController extends AbstractJsonApiControll
 
         return $result;
     }
-
 
 }

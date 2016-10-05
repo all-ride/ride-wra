@@ -14,7 +14,7 @@ use ride\service\MimeService;
 use ride\web\mvc\controller\AbstractController;
 
 /**
- * Abstract controller for a JSON API
+ * Abstract controller for a JSON API type
  */
 abstract class AbstractJsonApiController extends AbstractController {
 
@@ -52,7 +52,7 @@ abstract class AbstractJsonApiController extends AbstractController {
     }
 
     /**
-     * Hook to perform initializing
+     * Hook to initialize this controller
      * @return null
      */
     protected function initialize() {
