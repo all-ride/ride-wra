@@ -36,6 +36,7 @@ abstract class AbstractResourceJsonApiController extends AbstractJsonApiControll
     protected $relationships;
 
     protected $routes;
+    protected $reflectionHelper;
 
     /**
      * Constructs a new JSON API controller
